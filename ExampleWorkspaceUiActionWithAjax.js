@@ -45,9 +45,6 @@ function onClick(g_form) {
                 value: naskOutput
             }]
         }).then(function(fieldValues) {
-            // var indexOfFirst = fieldValues.updatedFields[0].value.indexOf('---');
-            // var indexOfLast = fieldValues.updatedFields[0].value.lastIndexOf('---');
-            // var jsonStr = fieldValues.updatedFields[0].value.substring(indexOfFirst + 1, indexOfLast);
             g_form.setValue("work_notes", fieldValues.updatedFields[0].value);
 			g_form.save();
         });
