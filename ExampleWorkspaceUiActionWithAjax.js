@@ -1,6 +1,6 @@
 function onClick(g_form) {
     g_modal.showFrame({
-        url: "https://mbucknery.service-now.com/genai.gif",
+        url: "https://<YOUR_INSTANCE>.service-now.com/genai.gif",
         title: "Now Assist Skill Output",
         size: "sm",
     });

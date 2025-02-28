@@ -10,8 +10,13 @@ This repository contains utility scripts that enhance ServiceNow functionality, 
 
 - **naskModalUtils.js**: A server-side script that provides an API for executing Now Assist skills and returning their output.
 - **ExampleWorkspaceUiActionWithAjax.js**: An example UI action that demonstrates how to use the naskModalUtils to execute a Now Assist skill and display the results in a modal dialog.
+- **genai.gif**: A pretty placeholder for modals
 
 ## Usage
+
+### genai.gif
+Upload to System UI -> Images
+Replace the instance name in the UI action with your instance name
 
 ### naskModalUtils
 
