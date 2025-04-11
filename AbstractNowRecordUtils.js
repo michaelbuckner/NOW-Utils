@@ -202,6 +202,62 @@ AbstractNowRecordUtils.prototype = {
     },
 
     /**
+     * Finds all interaction records for a specified user.
+     *
+     * @param {string} userId - The sys_id of the user to find interactions for.
+     * @param {boolean} [excludeEmpty=false] - If true, excludes fields with empty/null values.
+     * @returns {object[]} - An array of objects, each containing field values for each interaction.
+     *                      Returns an empty array if no records are found or input is invalid.
+     */
+    findUserInteractions: function(userId, excludeEmpty) {
+        // This is a specific implementation of findRelatedRecords for interactions
+        return this.findRelatedRecords('interaction', 'opened_for', userId, excludeEmpty);
+    },
+
+    /**
+     * Finds all interaction records for a specified user with only populated fields.
+     * This is a convenience method that calls findUserInteractions with excludeEmpty set to true.
+     *
+     * @param {string} userId - The sys_id of the user to find interactions for.
+     * @returns {object[]} - An array of objects, each containing only populated field values.
+     *                     Returns an empty array if no records are found or input is invalid.
+     */
+    findPopulatedUserInteractions: function(userId) {
+        return this.findUserInteractions(userId, true);
+    },
+
+    /**
+     * Returns a JSON string representation of all interactions for a specified user.
+     *
+     * @param {string} userId - The sys_id of the user to find interactions for.
+     * @param {boolean} [excludeEmpty=false] - If true, excludes fields with empty/null values.
+     * @returns {string} - A JSON string containing an array of objects with field values for each interaction.
+     *                    Returns '[]' if no records are found or input is invalid.
+     */
+    findUserInteractionsAsJSON: function(userId, excludeEmpty) {
+        var results = this.findUserInteractions(userId, excludeEmpty);
+        
+        try {
+            return JSON.stringify(results);
+        } catch (e) {
+            gs.error(this.logSource + '.findUserInteractionsAsJSON: Failed to stringify results: ' + e.message);
+            return '[]';
+        }
+    },
+
+    /**
+     * Returns a JSON string representation of all interactions for a specified user with only populated fields.
+     * This is a convenience method that calls findUserInteractionsAsJSON with excludeEmpty set to true.
+     *
+     * @param {string} userId - The sys_id of the user to find interactions for.
+     * @returns {string} - A JSON string containing an array of objects with only populated field values.
+     *                   Returns '[]' if no records are found or input is invalid.
+     */
+    findPopulatedUserInteractionsAsJSON: function(userId) {
+        return this.findUserInteractionsAsJSON(userId, true);
+    },
+
+    /**
      * Private method to validate common input parameters.
      *
      * @param {string} tableName - The name of a table.
