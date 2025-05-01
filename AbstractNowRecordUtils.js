@@ -2,6 +2,9 @@
  * Utility class providing abstract functions for ServiceNow record operations.
  * This script include offers reusable functions for retrieving complete record data
  * across any table in ServiceNow.
+ * 
+ * All methods support both sys_id and record number (e.g., INC0010001) as identifiers,
+ * making it more flexible for different use cases.
  */
 var AbstractNowRecordUtils = Class.create();
 AbstractNowRecordUtils.prototype = {
@@ -10,17 +13,17 @@ AbstractNowRecordUtils.prototype = {
     },
 
     /**
-     * Retrieves all field values for a specific record identified by sys_id and table name.
+     * Retrieves all field values for a specific record identified by record identifier and table name.
      *
      * @param {string} tableName - The name of the table containing the record.
-     * @param {string} sysId - The sys_id of the record to retrieve.
+     * @param {string} recordIdentifier - The sys_id or record number (e.g., INC0010001) of the record to retrieve.
      * @param {boolean} [excludeEmpty=false] - If true, excludes fields with empty/null values.
      * @returns {object} - An object containing field values for the specified record.
      *                    Returns null if the record is not found or input is invalid.
      */
-    getRecordAllFields: function(tableName, sysId, excludeEmpty) {
+    getRecordAllFields: function(tableName, recordIdentifier, excludeEmpty) {
         // Input validation
-        if (!this._validateInput(tableName, sysId)) {
+        if (!this._validateInput(tableName, recordIdentifier)) {
             return null;
         }
 
@@ -33,9 +36,11 @@ AbstractNowRecordUtils.prototype = {
                 return null;
             }
 
-            // Get the record
-            if (!gr.get(sysId)) {
-                gs.info(this.logSource + '.getRecordAllFields: Record with sys_id ' + sysId + ' not found in table ' + tableName);
+            // Get the record using either sys_id or record number
+            var recordFound = this._getRecord(gr, recordIdentifier);
+            
+            if (!recordFound) {
+                gs.info(this.logSource + '.getRecordAllFields: Record with identifier ' + recordIdentifier + ' not found in table ' + tableName);
                 return null;
             }
 
@@ -52,12 +57,12 @@ AbstractNowRecordUtils.prototype = {
      * This is a convenience method that calls getRecordAllFields with excludeEmpty set to true.
      *
      * @param {string} tableName - The name of the table containing the record.
-     * @param {string} sysId - The sys_id of the record to retrieve.
+     * @param {string} recordIdentifier - The sys_id or record number of the record to retrieve.
      * @returns {object} - An object containing only populated field values for the specified record.
      *                   Returns null if the record is not found or input is invalid.
      */
-    getPopulatedFields: function(tableName, sysId) {
-        return this.getRecordAllFields(tableName, sysId, true);
+    getPopulatedFields: function(tableName, recordIdentifier) {
+        return this.getRecordAllFields(tableName, recordIdentifier, true);
     },
 
     /**
@@ -65,16 +70,23 @@ AbstractNowRecordUtils.prototype = {
      *
      * @param {string} tableName - The table to search for related records.
      * @param {string} referenceFieldName - The field containing the reference to the target record.
-     * @param {string} targetSysId - The sys_id of the target record being referenced.
+     * @param {string} targetRecordIdentifier - The sys_id or record number of the target record being referenced.
+     * @param {string} [targetTableName] - The table name of the target record (required when using record number).
      * @param {boolean} [excludeEmpty=false] - If true, excludes fields with empty/null values.
      * @returns {object[]} - An array of objects, each containing field values for each related record.
      *                      Returns an empty array if no records are found or input is invalid.
      */
-    findRelatedRecords: function(tableName, referenceFieldName, targetSysId, excludeEmpty) {
+    findRelatedRecords: function(tableName, referenceFieldName, targetRecordIdentifier, targetTableName, excludeEmpty) {
         var results = [];
+        
+        // Handle optional parameters
+        if (typeof targetTableName === 'boolean') {
+            excludeEmpty = targetTableName;
+            targetTableName = null;
+        }
 
         // Input validation
-        if (!this._validateInput(tableName, targetSysId) || !referenceFieldName) {
+        if (!this._validateInput(tableName, targetRecordIdentifier) || !referenceFieldName) {
             return results;
         }
 
@@ -92,6 +104,19 @@ AbstractNowRecordUtils.prototype = {
                 gs.warn(this.logSource + '.findRelatedRecords: Field "' + referenceFieldName + 
                       '" does not exist on table "' + tableName + '".');
                 return results;
+            }
+
+            // If we have a record number instead of sys_id, we need to resolve it first
+            var targetSysId = targetRecordIdentifier;
+            if (targetRecordIdentifier.length !== 32 && targetTableName) {
+                var targetGr = new GlideRecord(targetTableName);
+                if (targetGr.isValid() && targetGr.get('number', targetRecordIdentifier)) {
+                    targetSysId = targetGr.getUniqueValue();
+                } else {
+                    gs.warn(this.logSource + '.findRelatedRecords: Could not resolve record number ' + 
+                          targetRecordIdentifier + ' in table ' + targetTableName);
+                    return results;
+                }
             }
 
             // Query for related records
@@ -121,25 +146,26 @@ AbstractNowRecordUtils.prototype = {
      *
      * @param {string} tableName - The table to search for related records.
      * @param {string} referenceFieldName - The field containing the reference to the target record.
-     * @param {string} targetSysId - The sys_id of the target record being referenced.
+     * @param {string} targetRecordIdentifier - The sys_id or record number of the target record being referenced.
+     * @param {string} [targetTableName] - The table name of the target record (required when using record number).
      * @returns {object[]} - An array of objects, each containing only populated field values.
      *                     Returns an empty array if no records are found or input is invalid.
      */
-    findPopulatedRelatedRecords: function(tableName, referenceFieldName, targetSysId) {
-        return this.findRelatedRecords(tableName, referenceFieldName, targetSysId, true);
+    findPopulatedRelatedRecords: function(tableName, referenceFieldName, targetRecordIdentifier, targetTableName) {
+        return this.findRelatedRecords(tableName, referenceFieldName, targetRecordIdentifier, targetTableName, true);
     },
 
     /**
      * Returns a JSON string representation of all fields for a specific record.
      *
      * @param {string} tableName - The name of the table containing the record.
-     * @param {string} sysId - The sys_id of the record to retrieve.
+     * @param {string} recordIdentifier - The sys_id or record number of the record to retrieve.
      * @param {boolean} [excludeEmpty=false] - If true, excludes fields with empty/null values.
      * @returns {string} - A JSON string containing field values for the specified record.
      *                    Returns '{}' if the record is not found or input is invalid.
      */
-    getRecordAllFieldsAsJSON: function(tableName, sysId, excludeEmpty) {
-        var recordData = this.getRecordAllFields(tableName, sysId, excludeEmpty);
+    getRecordAllFieldsAsJSON: function(tableName, recordIdentifier, excludeEmpty) {
+        var recordData = this.getRecordAllFields(tableName, recordIdentifier, excludeEmpty);
         
         if (!recordData) {
             return '{}';
@@ -158,12 +184,12 @@ AbstractNowRecordUtils.prototype = {
      * This is a convenience method that calls getRecordAllFieldsAsJSON with excludeEmpty set to true.
      *
      * @param {string} tableName - The name of the table containing the record.
-     * @param {string} sysId - The sys_id of the record to retrieve.
+     * @param {string} recordIdentifier - The sys_id or record number of the record to retrieve.
      * @returns {string} - A JSON string containing only populated field values for the specified record.
      *                   Returns '{}' if the record is not found or input is invalid.
      */
-    getPopulatedFieldsAsJSON: function(tableName, sysId) {
-        return this.getRecordAllFieldsAsJSON(tableName, sysId, true);
+    getPopulatedFieldsAsJSON: function(tableName, recordIdentifier) {
+        return this.getRecordAllFieldsAsJSON(tableName, recordIdentifier, true);
     },
 
     /**
@@ -171,13 +197,15 @@ AbstractNowRecordUtils.prototype = {
      *
      * @param {string} tableName - The table to search for related records.
      * @param {string} referenceFieldName - The field containing the reference to the target record.
-     * @param {string} targetSysId - The sys_id of the target record being referenced.
+     * @param {string} targetRecordIdentifier - The sys_id or record number of the target record being referenced.
+     * @param {string|boolean} [targetTableName] - The table name of the target record (required when using record number),
+     *                                           or boolean for excludeEmpty if targetTableName is not needed.
      * @param {boolean} [excludeEmpty=false] - If true, excludes fields with empty/null values.
      * @returns {string} - A JSON string containing an array of objects with field values for each related record.
      *                    Returns '[]' if no records are found or input is invalid.
      */
-    findRelatedRecordsAsJSON: function(tableName, referenceFieldName, targetSysId, excludeEmpty) {
-        var results = this.findRelatedRecords(tableName, referenceFieldName, targetSysId, excludeEmpty);
+    findRelatedRecordsAsJSON: function(tableName, referenceFieldName, targetRecordIdentifier, targetTableName, excludeEmpty) {
+        var results = this.findRelatedRecords(tableName, referenceFieldName, targetRecordIdentifier, targetTableName, excludeEmpty);
         
         try {
             return JSON.stringify(results);
@@ -193,49 +221,50 @@ AbstractNowRecordUtils.prototype = {
      *
      * @param {string} tableName - The table to search for related records.
      * @param {string} referenceFieldName - The field containing the reference to the target record.
-     * @param {string} targetSysId - The sys_id of the target record being referenced.
+     * @param {string} targetRecordIdentifier - The sys_id or record number of the target record being referenced.
+     * @param {string} [targetTableName] - The table name of the target record (required when using record number).
      * @returns {string} - A JSON string containing an array of objects with only populated field values.
      *                   Returns '[]' if no records are found or input is invalid.
      */
-    findPopulatedRelatedRecordsAsJSON: function(tableName, referenceFieldName, targetSysId) {
-        return this.findRelatedRecordsAsJSON(tableName, referenceFieldName, targetSysId, true);
+    findPopulatedRelatedRecordsAsJSON: function(tableName, referenceFieldName, targetRecordIdentifier, targetTableName) {
+        return this.findRelatedRecordsAsJSON(tableName, referenceFieldName, targetRecordIdentifier, targetTableName, true);
     },
 
     /**
      * Finds all interaction records for a specified user.
      *
-     * @param {string} userId - The sys_id of the user to find interactions for.
+     * @param {string} userIdentifier - The sys_id or user_name of the user to find interactions for.
      * @param {boolean} [excludeEmpty=false] - If true, excludes fields with empty/null values.
      * @returns {object[]} - An array of objects, each containing field values for each interaction.
      *                      Returns an empty array if no records are found or input is invalid.
      */
-    findUserInteractions: function(userId, excludeEmpty) {
+    findUserInteractions: function(userIdentifier, excludeEmpty) {
         // This is a specific implementation of findRelatedRecords for interactions
-        return this.findRelatedRecords('interaction', 'opened_for', userId, excludeEmpty);
+        return this.findRelatedRecords('interaction', 'opened_for', userIdentifier, 'sys_user', excludeEmpty);
     },
 
     /**
      * Finds all interaction records for a specified user with only populated fields.
      * This is a convenience method that calls findUserInteractions with excludeEmpty set to true.
      *
-     * @param {string} userId - The sys_id of the user to find interactions for.
+     * @param {string} userIdentifier - The sys_id or user_name of the user to find interactions for.
      * @returns {object[]} - An array of objects, each containing only populated field values.
      *                     Returns an empty array if no records are found or input is invalid.
      */
-    findPopulatedUserInteractions: function(userId) {
-        return this.findUserInteractions(userId, true);
+    findPopulatedUserInteractions: function(userIdentifier) {
+        return this.findUserInteractions(userIdentifier, true);
     },
 
     /**
      * Returns a JSON string representation of all interactions for a specified user.
      *
-     * @param {string} userId - The sys_id of the user to find interactions for.
+     * @param {string} userIdentifier - The sys_id or user_name of the user to find interactions for.
      * @param {boolean} [excludeEmpty=false] - If true, excludes fields with empty/null values.
      * @returns {string} - A JSON string containing an array of objects with field values for each interaction.
      *                    Returns '[]' if no records are found or input is invalid.
      */
-    findUserInteractionsAsJSON: function(userId, excludeEmpty) {
-        var results = this.findUserInteractions(userId, excludeEmpty);
+    findUserInteractionsAsJSON: function(userIdentifier, excludeEmpty) {
+        var results = this.findUserInteractions(userIdentifier, excludeEmpty);
         
         try {
             return JSON.stringify(results);
@@ -249,33 +278,51 @@ AbstractNowRecordUtils.prototype = {
      * Returns a JSON string representation of all interactions for a specified user with only populated fields.
      * This is a convenience method that calls findUserInteractionsAsJSON with excludeEmpty set to true.
      *
-     * @param {string} userId - The sys_id of the user to find interactions for.
+     * @param {string} userIdentifier - The sys_id or user_name of the user to find interactions for.
      * @returns {string} - A JSON string containing an array of objects with only populated field values.
      *                   Returns '[]' if no records are found or input is invalid.
      */
-    findPopulatedUserInteractionsAsJSON: function(userId) {
-        return this.findUserInteractionsAsJSON(userId, true);
+    findPopulatedUserInteractionsAsJSON: function(userIdentifier) {
+        return this.findUserInteractionsAsJSON(userIdentifier, true);
     },
 
     /**
      * Private method to validate common input parameters.
      *
      * @param {string} tableName - The name of a table.
-     * @param {string} sysId - A sys_id value.
+     * @param {string} recordIdentifier - A sys_id or record number value.
      * @returns {boolean} - True if inputs are valid, false otherwise.
      */
-    _validateInput: function(tableName, sysId) {
+    _validateInput: function(tableName, recordIdentifier) {
         if (!tableName || typeof tableName !== 'string') {
             gs.warn(this.logSource + ': Invalid or missing tableName provided.');
             return false;
         }
 
-        if (!sysId || typeof sysId !== 'string' || sysId.length !== 32) {
-            gs.warn(this.logSource + ': Invalid or missing sysId provided.');
+        if (!recordIdentifier || typeof recordIdentifier !== 'string') {
+            gs.warn(this.logSource + ': Invalid or missing record identifier provided.');
             return false;
         }
 
         return true;
+    },
+    
+    /**
+     * Private method to get a record using either sys_id or record number.
+     *
+     * @param {GlideRecord} gr - A GlideRecord object for the table.
+     * @param {string} recordIdentifier - The sys_id or record number of the record.
+     * @returns {boolean} - True if record was found, false otherwise.
+     */
+    _getRecord: function(gr, recordIdentifier) {
+        // If it's a sys_id (32 character string)
+        if (recordIdentifier.length === 32) {
+            return gr.get(recordIdentifier);
+        } 
+        // Otherwise, assume it's a record number
+        else {
+            return gr.get('number', recordIdentifier);
+        }
     },
 
     /**
