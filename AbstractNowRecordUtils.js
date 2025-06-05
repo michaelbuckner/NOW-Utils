@@ -287,6 +287,51 @@ AbstractNowRecordUtils.prototype = {
     },
 
     /**
+     * Retrieves the short description for a specific record.
+     *
+     * @param {string} tableName - The name of the table containing the record.
+     * @param {string} recordIdentifier - The sys_id or record number of the record to retrieve.
+     * @returns {string} - The short description of the record.
+     *                    Returns null if the record is not found, input is invalid, or short_description field doesn't exist.
+     */
+    getShortDescription: function(tableName, recordIdentifier) {
+        // Input validation
+        if (!this._validateInput(tableName, recordIdentifier)) {
+            return null;
+        }
+
+        try {
+            var gr = new GlideRecord(tableName);
+            
+            // Validate table exists and is accessible
+            if (!gr.isValid()) {
+                gs.warn(this.logSource + '.getShortDescription: Table "' + tableName + '" is not valid or accessible.');
+                return null;
+            }
+
+            // Validate short_description field exists on the table
+            if (!gr.isValidField('short_description')) {
+                gs.warn(this.logSource + '.getShortDescription: Field "short_description" does not exist on table "' + tableName + '".');
+                return null;
+            }
+
+            // Get the record using either sys_id or record number
+            var recordFound = this._getRecord(gr, recordIdentifier);
+            
+            if (!recordFound) {
+                gs.info(this.logSource + '.getShortDescription: Record with identifier ' + recordIdentifier + ' not found in table ' + tableName);
+                return null;
+            }
+
+            // Return the short description
+            return gr.getValue('short_description');
+        } catch (e) {
+            gs.error(this.logSource + '.getShortDescription: Error retrieving short description: ' + e.message);
+            return null;
+        }
+    },
+
+    /**
      * Private method to validate common input parameters.
      *
      * @param {string} tableName - The name of a table.

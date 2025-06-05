@@ -121,6 +121,23 @@ var populatedFields = utils.getPopulatedFields('incident', 'INC0010042');
 var jsonData = utils.getPopulatedFieldsAsJSON('incident', 'INC0010042');
 ```
 
+### Get short description for a record
+
+```javascript
+// Get the short description for a record using sys_id
+var shortDesc = utils.getShortDescription('incident', '31bea9d1d7233100f2d224837e610375');
+
+// Or use record number instead
+var shortDesc = utils.getShortDescription('incident', 'INC0010042');
+
+// Example usage in a script
+if (shortDesc) {
+    gs.info('Short description: ' + shortDesc);
+} else {
+    gs.info('Short description not found or record does not exist');
+}
+```
+
 ### Find related records
 
 ```javascript
